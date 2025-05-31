@@ -30,7 +30,7 @@ public enum NetworkError: Error, Sendable {
     case encodingError(EncodingError)
     
     /// SSL/TLS security errors
-    case securityError(Error)
+    case securityError(String)
     
     /// Request was cancelled
     case cancelled
@@ -143,8 +143,8 @@ extension NetworkError: LocalizedError {
             return "Failed to decode response: \(error.localizedDescription)"
         case .encodingError(let error):
             return "Failed to encode request: \(error.localizedDescription)"
-        case .securityError(let error):
-            return "Security error: \(error.localizedDescription)"
+        case .securityError(let message):
+            return "Security error: \(message)"
         case .cancelled:
             return "Request was cancelled"
         case .unknown(let error):
@@ -171,7 +171,7 @@ extension NetworkError {
         case .cancelled:
             return .cancelled
         case .secureConnectionFailed, .serverCertificateUntrusted:
-            return .securityError(urlError)
+            return .securityError(urlError.localizedDescription)
         default:
             return .unknown(urlError)
         }

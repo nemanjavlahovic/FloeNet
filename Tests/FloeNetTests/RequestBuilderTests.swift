@@ -453,7 +453,7 @@ final class RequestBuilderTests: XCTestCase {
             .send(with: mockClient, expecting: TestUser.self)
         
         XCTAssertEqual(response.statusCode, 200)
-        XCTAssertEqual(response.data, testUser)
+        XCTAssertEqual(response.value, testUser)
         XCTAssertTrue(mockClient.verify(.url(url)))
     }
 } 

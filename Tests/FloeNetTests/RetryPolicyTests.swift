@@ -93,7 +93,7 @@ final class RetryPolicyTests: XCTestCase {
         let serverError = NetworkError.serverError(statusCode: 500, data: nil)
         let clientError = NetworkError.clientError(statusCode: 404, data: nil)
         let connectivityError = NetworkError.noInternetConnection
-        let decodingError = NetworkError.decodingFailed(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Test")))
+        let decodingError = NetworkError.decodingError(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Test")))
         
         XCTAssertTrue(policy.shouldRetry(serverError, 0))
         XCTAssertFalse(policy.shouldRetry(clientError, 0))
@@ -232,7 +232,7 @@ final class RetryPolicyTests: XCTestCase {
         
         // Non-retryable errors
         let clientError = NetworkError.clientError(statusCode: 404, data: nil)
-        let decodingError = NetworkError.decodingFailed(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Test")))
+        let decodingError = NetworkError.decodingError(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Test")))
         let invalidRequest = NetworkError.invalidRequest("Test")
         
         XCTAssertFalse(policy.shouldRetry(clientError, 0))

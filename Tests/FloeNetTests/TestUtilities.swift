@@ -57,6 +57,24 @@ public struct TestUtilities {
         public static func random() -> URL {
             return URL(string: "https://api.example.com/\(DataGenerator.randomString())")!
         }
+        
+        /// DataUSA Population API - reliable, real-world JSON API
+        public static let dataUSAPopulation = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
+        
+        /// DataUSA base API URL for building custom queries
+        public static let dataUSABase = URL(string: "https://datausa.io/api/data")!
+        
+        /// HTMLBin for testing HTML responses (not JSON)
+        public static let htmlResponse = URL(string: "https://httpbin.org/html")!
+        
+        /// Invalid domain for testing connectivity errors
+        public static let invalidDomain = URL(string: "https://invalid-domain-that-doesnt-exist-12345.com/api")!
+        
+        /// DataUSA with invalid endpoint for 404 testing
+        public static let notFound = URL(string: "https://datausa.io/api/nonexistent-endpoint")!
+        
+        /// General purpose example URL for builder testing (non-network)
+        public static let example = URL(string: "https://api.example.com")!
     }
     
     /// Common test headers
@@ -113,6 +131,88 @@ public struct TestErrorResponse: Codable, Error, Sendable {
         self.error = error
         self.code = code
         self.details = details
+    }
+}
+
+/// DataUSA API Models for real-world testing
+public struct DataUSAResponse: Codable, Sendable {
+    public let data: [PopulationData]
+    public let source: [DataSource]
+    
+    public init(data: [PopulationData], source: [DataSource]) {
+        self.data = data
+        self.source = source
+    }
+}
+
+public struct PopulationData: Codable, Sendable {
+    public let idNation: String
+    public let nation: String
+    public let idYear: String
+    public let year: String
+    public let population: Int
+    public let slugNation: String
+    
+    private enum CodingKeys: String, CodingKey {
+        case idNation = "ID Nation"
+        case nation = "Nation"
+        case idYear = "ID Year"
+        case year = "Year"
+        case population = "Population"
+        case slugNation = "Slug Nation"
+    }
+    
+    public init(idNation: String, nation: String, idYear: String, year: String, population: Int, slugNation: String) {
+        self.idNation = idNation
+        self.nation = nation
+        self.idYear = idYear
+        self.year = year
+        self.population = population
+        self.slugNation = slugNation
+    }
+}
+
+public struct DataSource: Codable, Sendable {
+    public let measures: [String]
+    public let annotations: SourceAnnotations
+    public let name: String
+    public let substitutions: [String]
+    
+    public init(measures: [String], annotations: SourceAnnotations, name: String, substitutions: [String]) {
+        self.measures = measures
+        self.annotations = annotations
+        self.name = name
+        self.substitutions = substitutions
+    }
+}
+
+public struct SourceAnnotations: Codable, Sendable {
+    public let sourceName: String
+    public let sourceDescription: String
+    public let datasetName: String
+    public let datasetLink: String
+    public let tableId: String
+    public let topic: String
+    public let subtopic: String
+    
+    private enum CodingKeys: String, CodingKey {
+        case sourceName = "source_name"
+        case sourceDescription = "source_description"
+        case datasetName = "dataset_name"
+        case datasetLink = "dataset_link"
+        case tableId = "table_id"
+        case topic = "topic"
+        case subtopic = "subtopic"
+    }
+    
+    public init(sourceName: String, sourceDescription: String, datasetName: String, datasetLink: String, tableId: String, topic: String, subtopic: String) {
+        self.sourceName = sourceName
+        self.sourceDescription = sourceDescription
+        self.datasetName = datasetName
+        self.datasetLink = datasetLink
+        self.tableId = tableId
+        self.topic = topic
+        self.subtopic = subtopic
     }
 }
 
@@ -194,17 +294,29 @@ extension XCTestCase {
         }
         
         switch (networkError, expectedType) {
-        case (.timeout, .timeout),
-             (.noConnection, .noConnection),
+        case (.requestTimeout, .requestTimeout),
+             (.noInternetConnection, .noInternetConnection),
              (.invalidURL(_), .invalidURL(_)),
              (.invalidRequest(_), .invalidRequest(_)),
              (.requestTooLarge, .requestTooLarge),
-             (.responseTooLarge, .responseTooLarge):
+             (.responseTooLarge, .responseTooLarge),
+             (.cancelled, .cancelled),
+             (.invalidResponse, .invalidResponse):
             break // Match
-        case let (.httpError(code1), .httpError(code2)) where code1 == code2:
+        case let (.httpError(code1, _), .httpError(code2, _)) where code1 == code2:
             break // Match
-        case let (.decodingError(msg1), .decodingError(msg2)) where msg1 == msg2:
+        case let (.clientError(code1, _), .clientError(code2, _)) where code1 == code2:
             break // Match
+        case let (.serverError(code1, _), .serverError(code2, _)) where code1 == code2:
+            break // Match
+        case (.decodingError(_), .decodingError(_)):
+            break // Match (don't compare DecodingError details)
+        case (.encodingError(_), .encodingError(_)):
+            break // Match (don't compare EncodingError details)
+        case (.securityError(_), .securityError(_)):
+            break // Match (don't compare security error details)
+        case (.unknown(_), .unknown(_)):
+            break // Match (don't compare underlying error details)
         default:
             XCTFail(
                 "Expected \(expectedType), got \(networkError)",
@@ -278,7 +390,7 @@ extension MockHTTPClient.MockResponse {
     }
     
     /// Create API wrapper response
-    public static func apiSuccess<T: Encodable>(data: T) throws -> MockHTTPClient.MockResponse {
+    public static func apiSuccess<T: Codable>(data: T) throws -> MockHTTPClient.MockResponse {
         let wrapper = TestAPIResponse(data: data)
         return try json(wrapper)
     }
@@ -367,7 +479,7 @@ public struct TestScenarios {
     public static func setupNetworkErrorScenario(
         mockClient: MockHTTPClient,
         url: URL,
-        error: NetworkError = .noConnection
+        error: NetworkError = .noInternetConnection
     ) {
         mockClient.stub(url: url, response: .error(error))
     }

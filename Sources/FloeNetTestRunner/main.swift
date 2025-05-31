@@ -2,7 +2,6 @@ import Foundation
 import FloeNet
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
-@main
 struct FloeNetTestRunner {
     static func main() async {
         print("🧪 FloeNet Test Runner")

@@ -49,15 +49,58 @@ dependencies: [
 import FloeNet
 
 let client = HTTPClient()
-let url = URL(string: "https://api.example.com/users")!
+
+// Real-world example: US Population data from DataUSA API
+let url = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
 
 do {
     let response = try await client.get(url: url)
     print("Status: \(response.statusCode)")
-    print("Data: \(response.stringValue ?? "")")
+    print("Population Data: \(response.stringValue ?? "")")
 } catch {
     print("Error: \(error)")
 }
+```
+
+### Request Builder Pattern with Real API
+
+```swift
+// Fetch US population data with custom headers
+let response = try await RequestBuilder
+    .get("https://datausa.io/api/data")
+    .header("User-Agent", "MyApp/1.0")
+    .query("drilldowns", "Nation")
+    .query("measures", "Population")
+    .timeout(30.0)
+    .send(with: client)
+
+// Decode structured response
+struct DataUSAResponse: Codable {
+    let data: [PopulationData]
+    let source: [DataSource]
+}
+
+struct PopulationData: Codable {
+    let nation: String
+    let year: String
+    let population: Int
+    
+    private enum CodingKeys: String, CodingKey {
+        case nation = "Nation"
+        case year = "Year"
+        case population = "Population"
+    }
+}
+
+let populationResponse = try await RequestBuilder()
+    .url("https://datausa.io/api/data")
+    .get()
+    .query("drilldowns", "Nation")
+    .query("measures", "Population")
+    .send(with: client, expecting: DataUSAResponse.self)
+
+let latestPopulation = populationResponse.value?.data.first
+print("US Population in \(latestPopulation?.year ?? "Unknown"): \(latestPopulation?.population.formatted() ?? "Unknown")")
 ```
 
 ### Request Builder Pattern
@@ -523,38 +566,57 @@ FloeNet follows these design principles:
 
 ## Testing
 
-Run the test suite:
+FloeNet provides both traditional XCTest integration and a custom test runner for comprehensive testing.
+
+### Running XCTests
 
 ```bash
 swift test
 ```
 
-Or use the test runners:
+### Running Custom Test Runner
+
+For real-world API testing and comprehensive validation:
 
 ```swift
 import FloeNet
 
-// Run all tests
-TestRunner.runAllTests()
+// Run comprehensive test suite with real DataUSA API
+await TestRunner.runAllTests()
+```
+
+The custom test runner includes:
+- **Unit Tests**: Core functionality, offline
+- **Integration Tests**: Real DataUSA API calls  
+- **Performance Tests**: Concurrent request handling
+- **Error Scenario Tests**: Timeout, invalid URLs, JSON decoding errors
+
+### DataUSA API Integration Tests
+
+FloeNet includes dedicated tests using the real DataUSA Population API to demonstrate:
+- JSON decoding with complex nested structures
+- Query parameter handling
+- Real-world error scenarios  
+- Concurrent request processing
+- Response validation
+
+```swift
+// Example: Test real API integration
+func testDataUSAAPI() async throws {
+    let client = HTTPClient()
+    let url = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
+    
+    let response = try await client.send(
+        HTTPRequest.get(url: url), 
+        expecting: DataUSAResponse.self
+    )
+    
+    XCTAssertEqual(response.statusCode, 200)
+    XCTAssertEqual(response.value?.data.first?.nation, "United States")
+    XCTAssertTrue((response.value?.data.first?.population ?? 0) > 300_000_000)
+}
 ```
 
 ## Examples
 
-Check out the `Examples/` directory for comprehensive usage examples:
-
-- `BasicUsage.swift` - Core functionality demonstrations
-- `RequestBuilderExamples.swift` - RequestBuilder patterns and best practices
-- `MockingExamples.swift` - Testing with MockHTTPClient
-- `RealWorldExamples.swift` - Complete API client implementations
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines and submit pull requests to our repository.
-
-## License
-
-FloeNet is available under the MIT license. See the LICENSE file for more info.
-
----
-
-**FloeNet** - Modern Swift networking made simple 🌊
+Check out the `Examples/`

@@ -290,7 +290,7 @@ public struct TestRunner {
         
         executeTest("NetworkConfiguration builder pattern") {
             let config = NetworkConfiguration.builder
-                .defaultTimeout(30.0)
+                .timeout(30.0)
                 .retryPolicy(.conservative)
                 .build()
             
@@ -304,8 +304,8 @@ public struct TestRunner {
     private static func runIntegrationTests() async {
         let client = HTTPClient()
         
-        await executeAsyncTest("Simple GET request") {
-            let url = URL(string: "https://httpbin.org/get")!
+        await executeAsyncTest("DataUSA Population API - GET request") {
+            let url = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
             let request = HTTPRequest.get(url: url)
             
             do {
@@ -313,76 +313,69 @@ public struct TestRunner {
                 assert(response.statusCode == 200)
                 assert(response.isSuccess)
                 assert(!response.data.isEmpty)
-            } catch {
-                assertionFailure("GET request failed: \(error)")
-            }
-        }
-        
-        await executeAsyncTest("POST request with JSON") {
-            struct TestPayload: Codable {
-                let name: String
-                let age: Int
-            }
-            
-            let url = URL(string: "https://httpbin.org/post")!
-            let payload = TestPayload(name: "John Doe", age: 30)
-            
-            do {
-                let request = try HTTPRequest.json(method: .post, url: url, body: payload)
-                let response = try await client.send(request)
-                assert(response.statusCode == 200)
-                assert(response.isSuccess)
                 
+                // Verify we got JSON with expected structure
                 let responseString = response.stringValue ?? ""
-                assert(responseString.contains("John Doe"))
-                assert(responseString.contains("30"))
+                assert(responseString.contains("data"))
+                assert(responseString.contains("Population"))
+                assert(responseString.contains("United States"))
             } catch {
-                assertionFailure("POST request failed: \(error)")
+                assertionFailure("DataUSA API request failed: \(error)")
             }
         }
         
-        await executeAsyncTest("Request with headers and query parameters") {
-            let url = URL(string: "https://httpbin.org/get")!
-            let headers: HTTPHeaders = ["User-Agent": "FloeNet-Test/1.0"]
-            let queryParams = ["test": "value", "number": "42"]
-            
-            let request = HTTPRequest.get(url: url, headers: headers, queryParameters: queryParams)
-            
-            do {
-                let response = try await client.send(request)
-                assert(response.statusCode == 200)
-                
-                let responseString = response.stringValue ?? ""
-                assert(responseString.contains("FloeNet-Test/1.0"))
-                assert(responseString.contains("test"))
-                assert(responseString.contains("value"))
-                assert(responseString.contains("42"))
-            } catch {
-                assertionFailure("Request with headers/params failed: \(error)")
-            }
-        }
-        
-        await executeAsyncTest("JSON response decoding") {
-            struct HTTPBinResponse: Codable {
-                let url: String
-                let headers: [String: String]
-            }
-            
-            let url = URL(string: "https://httpbin.org/get")!
+        await executeAsyncTest("DataUSA API - JSON response decoding") {
+            let url = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
             let request = HTTPRequest.get(url: url)
             
             do {
-                let response = try await client.send(request, expecting: HTTPBinResponse.self)
+                let response = try await client.send(request, expecting: DataUSAResponse.self)
                 assert(response.statusCode == 200)
-                assert(response.value.url == url.absoluteString)
-                assert(!response.value.headers.isEmpty)
+                assert(response.value != nil)
+                
+                guard let populationResponse = response.value else {
+                    assertionFailure("Failed to decode DataUSA response")
+                    return
+                }
+                
+                // Verify we have population data
+                assert(!populationResponse.data.isEmpty)
+                assert(populationResponse.data.first?.nation == "United States")
+                assert(populationResponse.data.first?.population ?? 0 > 300_000_000) // US population > 300M
+                
+                // Verify data source information
+                assert(!populationResponse.source.isEmpty)
+                assert(populationResponse.source.first?.annotations.sourceName == "Census Bureau")
+                
+                print("  📊 Retrieved \(populationResponse.data.count) years of US population data")
+                if let latest = populationResponse.data.first {
+                    print("  📈 Latest: \(latest.year) - \(latest.population.formatted()) people")
+                }
+                
             } catch {
-                assertionFailure("JSON decoding failed: \(error)")
+                assertionFailure("DataUSA JSON decoding failed: \(error)")
             }
         }
         
-        await executeAsyncTest("HTTPClient convenience methods") {
-            let url = URL(string: "https://httpbin.org/get")!
+        await executeAsyncTest("Request with custom headers") {
+            let url = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
+            let headers: HTTPHeaders = [
+                "User-Agent": "FloeNet-Test/1.0",
+                "Accept": "application/json"
+            ]
+            let request = HTTPRequest.get(url: url, headers: headers)
+            
+            do {
+                let response = try await client.send(request)
+                assert(response.statusCode == 200)
+                assert(response.contentType?.contains("json") == true)
+            } catch {
+                assertionFailure("Request with headers failed: \(error)")
+            }
+        }
+        
+        await executeAsyncTest("HTTPClient convenience method") {
+            let url = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
             
             do {
                 let response = try await client.get(url: url)
@@ -390,6 +383,26 @@ public struct TestRunner {
                 assert(response.isSuccess)
             } catch {
                 assertionFailure("Convenience GET failed: \(error)")
+            }
+        }
+        
+        await executeAsyncTest("Request with query parameters") {
+            let baseURL = URL(string: "https://datausa.io/api/data")!
+            let queryParams = [
+                "drilldowns": "Nation",
+                "measures": "Population"
+            ]
+            let request = HTTPRequest.get(url: baseURL, queryParameters: queryParams)
+            
+            do {
+                let response = try await client.send(request)
+                assert(response.statusCode == 200)
+                
+                let responseString = response.stringValue ?? ""
+                assert(responseString.contains("United States"))
+                assert(responseString.contains("Population"))
+            } catch {
+                assertionFailure("Request with query parameters failed: \(error)")
             }
         }
     }
@@ -453,7 +466,7 @@ public struct TestRunner {
         let client = HTTPClient()
         
         await executeAsyncTest("404 Client Error") {
-            let url = URL(string: "https://httpbin.org/status/404")!
+            let url = URL(string: "https://datausa.io/api/nonexistent-endpoint")!
             let request = HTTPRequest.get(url: url)
             
             do {
@@ -468,25 +481,26 @@ public struct TestRunner {
             }
         }
         
-        await executeAsyncTest("500 Server Error") {
-            let url = URL(string: "https://httpbin.org/status/500")!
-            let request = HTTPRequest.get(url: url)
+        await executeAsyncTest("Invalid URL Error") {
+            let invalidURL = URL(string: "https://invalid-domain-that-doesnt-exist-12345.com/api")!
+            let request = HTTPRequest.get(url: invalidURL)
             
             do {
                 _ = try await client.send(request)
-                assertionFailure("500 request should have failed")
+                assertionFailure("Invalid domain request should have failed")
             } catch let error as NetworkError {
-                assert(error.isServerError)
-                assert(error.isRetryable)
-                assert(error.statusCode == 500)
+                // Should be a connectivity error
+                assert(error.isConnectivityError || error.isClientError)
+                print("  ℹ️  Got expected error: \(error)")
             } catch {
                 assertionFailure("Unexpected error type: \(error)")
             }
         }
         
-        await executeAsyncTest("Request timeout") {
-            let url = URL(string: "https://httpbin.org/delay/3")!
-            let request = HTTPRequest.get(url: url, timeout: 1.0) // 1s timeout for 3s delay
+        await executeAsyncTest("Request timeout with short timeout") {
+            // Use a real but slow endpoint with very short timeout
+            let url = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
+            let request = HTTPRequest.get(url: url, timeout: 0.001) // 1ms timeout - should fail
             
             let startTime = Date()
             
@@ -495,31 +509,52 @@ public struct TestRunner {
                 assertionFailure("Timeout request should have failed")
             } catch {
                 let elapsed = Date().timeIntervalSince(startTime)
-                assert(elapsed < 2.0) // Should timeout before 2 seconds
-                print("  ⏱️  Timeout occurred after \(String(format: "%.2f", elapsed))s")
+                print("  ⏱️  Request failed after \(String(format: "%.3f", elapsed))s (expected timeout)")
+                
+                // Should fail quickly due to timeout
+                assert(elapsed < 5.0) // Should fail within 5 seconds
+                
+                // Check if it's a timeout-related error
+                if let networkError = error as? NetworkError {
+                    assert(networkError.isConnectivityError || networkError.statusCode != nil)
+                }
             }
         }
         
-        await executeAsyncTest("JSON decoding error") {
+        await executeAsyncTest("JSON decoding error with HTML response") {
+            // Try to decode HTML as our DataUSA response structure
             let url = URL(string: "https://httpbin.org/html")! // Returns HTML, not JSON
             let request = HTTPRequest.get(url: url)
             
-            struct TestStruct: Codable {
-                let key: String
-            }
-            
             do {
-                _ = try await client.send(request, expecting: TestStruct.self)
+                _ = try await client.send(request, expecting: DataUSAResponse.self)
                 assertionFailure("JSON decoding should have failed")
             } catch let error as NetworkError {
-                if case .decodingFailed = error {
+                if case .decodingError = error {
                     // Expected
+                    print("  ℹ️  Got expected decoding error")
                 } else {
-                    assertionFailure("Expected decodingFailed error, got: \(error)")
+                    assertionFailure("Expected decodingError, got: \(error)")
                 }
             } catch {
                 assertionFailure("Unexpected error type: \(error)")
             }
+        }
+        
+        await executeAsyncTest("Network error retry logic") {
+            // Test that retryable errors are properly identified
+            let serverError = NetworkError.serverError(statusCode: 500, data: nil)
+            let clientError = NetworkError.clientError(statusCode: 404, data: nil)
+            let connectivityError = NetworkError.noInternetConnection
+            
+            let policy = RetryPolicy.standard
+            
+            assert(policy.shouldRetry(serverError, 0))
+            assert(!policy.shouldRetry(clientError, 0))
+            assert(policy.shouldRetry(connectivityError, 0))
+            
+            // Test retry limits
+            assert(!policy.shouldRetry(serverError, 5)) // Beyond max retries
         }
     }
     

@@ -137,32 +137,40 @@ final class HTTPClientTests: XCTestCase {
     // MARK: - Response Decoding Tests
     
     func testJSONResponseDecoding() async throws {
-        struct HTTPBinResponse: Codable {
-            let url: String
-            let headers: [String: String]
-        }
-        
-        let url = URL(string: "https://httpbin.org/get")!
+        let url = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
         let request = HTTPRequest.get(url: url)
         
-        let response = try await httpClient.send(request, expecting: HTTPBinResponse.self)
+        let response = try await httpClient.send(request, expecting: DataUSAResponse.self)
         
         XCTAssertEqual(response.statusCode, 200)
         XCTAssertTrue(response.isSuccess)
-        XCTAssertEqual(response.value.url, url.absoluteString)
-        XCTAssertNotNil(response.value.headers)
+        XCTAssertNotNil(response.value)
+        
+        guard let populationData = response.value else {
+            XCTFail("Failed to decode DataUSA response")
+            return
+        }
+        
+        XCTAssertFalse(populationData.data.isEmpty)
+        XCTAssertEqual(populationData.data.first?.nation, "United States")
+        XCTAssertTrue((populationData.data.first?.population ?? 0) > 300_000_000)
+        
+        XCTAssertFalse(populationData.source.isEmpty)
+        XCTAssertEqual(populationData.source.first?.annotations.sourceName, "Census Bureau")
     }
     
     func testStringResponseDecoding() async throws {
-        let url = URL(string: "https://httpbin.org/get")!
+        let url = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
         let request = HTTPRequest.get(url: url)
         
         let response = try await httpClient.sendString(request)
         
         XCTAssertEqual(response.statusCode, 200)
         XCTAssertTrue(response.isSuccess)
-        XCTAssertFalse(response.value.isEmpty)
-        XCTAssertTrue(response.value.contains("httpbin.org"))
+        XCTAssertNotNil(response.value)
+        XCTAssertFalse(response.value?.isEmpty ?? true)
+        XCTAssertTrue(response.value?.contains("United States") ?? false)
+        XCTAssertTrue(response.value?.contains("Population") ?? false)
     }
     
     func testEmptyResponseHandling() async throws {
@@ -234,10 +242,10 @@ final class HTTPClientTests: XCTestCase {
             _ = try await httpClient.send(request, expecting: TestStruct.self)
             XCTFail("Expected decoding error")
         } catch let error as NetworkError {
-            if case .decodingFailed = error {
+            if case .decodingError = error {
                 // This is expected
             } else {
-                XCTFail("Expected decodingFailed error, got: \(error)")
+                XCTFail("Expected decodingError, got: \(error)")
             }
         }
     }
@@ -267,13 +275,13 @@ final class HTTPClientTests: XCTestCase {
     
     func testCustomHTTPClientConfiguration() async throws {
         let config = NetworkConfiguration.builder
-            .defaultTimeout(30.0)
+            .timeout(30.0)
             .retryPolicy(.never)
             .build()
         
         let customClient = HTTPClient(configuration: config)
         
-        let url = URL(string: "https://httpbin.org/get")!
+        let url = URL(string: "https://datausa.io/api/data?drilldowns=Nation&measures=Population")!
         let request = HTTPRequest.get(url: url)
         
         let response = try await customClient.send(request)

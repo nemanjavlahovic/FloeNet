@@ -17,12 +17,16 @@ public struct HTTPResponse<T>: Sendable where T: Sendable {
     /// Decoded response object (if successful)
     public let value: T?
     
+    /// Request duration in seconds
+    public let duration: TimeInterval
+    
     /// Initialize with raw response data
-    public init(data: Data, urlResponse: HTTPURLResponse, value: T? = nil) {
+    public init(data: Data, urlResponse: HTTPURLResponse, value: T? = nil, duration: TimeInterval = 0) {
         self.data = data
         self.statusCode = urlResponse.statusCode
         self.urlResponse = urlResponse
         self.value = value
+        self.duration = duration
         
         // Convert response headers
         var responseHeaders = HTTPHeaders()
@@ -63,17 +67,17 @@ extension HTTPResponse {
 // MARK: - Data Response (when T is Data)
 extension HTTPResponse where T == Data {
     /// Create a data response
-    public static func data(data: Data, urlResponse: HTTPURLResponse) -> HTTPResponse<Data> {
-        HTTPResponse<Data>(data: data, urlResponse: urlResponse, value: data)
+    public static func data(data: Data, urlResponse: HTTPURLResponse, duration: TimeInterval = 0) -> HTTPResponse<Data> {
+        HTTPResponse<Data>(data: data, urlResponse: urlResponse, value: data, duration: duration)
     }
 }
 
 // MARK: - String Response
 extension HTTPResponse where T == String {
     /// Create a string response
-    public static func string(data: Data, urlResponse: HTTPURLResponse, encoding: String.Encoding = .utf8) -> HTTPResponse<String> {
+    public static func string(data: Data, urlResponse: HTTPURLResponse, encoding: String.Encoding = .utf8, duration: TimeInterval = 0) -> HTTPResponse<String> {
         let string = String(data: data, encoding: encoding)
-        return HTTPResponse<String>(data: data, urlResponse: urlResponse, value: string)
+        return HTTPResponse<String>(data: data, urlResponse: urlResponse, value: string, duration: duration)
     }
 }
 
@@ -82,8 +86,8 @@ public struct EmptyResponse: Sendable {}
 
 extension HTTPResponse where T == EmptyResponse {
     /// Create an empty response (for requests like DELETE that may not return data)
-    public static func empty(data: Data, urlResponse: HTTPURLResponse) -> HTTPResponse<EmptyResponse> {
-        HTTPResponse<EmptyResponse>(data: data, urlResponse: urlResponse, value: EmptyResponse())
+    public static func empty(data: Data, urlResponse: HTTPURLResponse, duration: TimeInterval = 0) -> HTTPResponse<EmptyResponse> {
+        HTTPResponse<EmptyResponse>(data: data, urlResponse: urlResponse, value: EmptyResponse(), duration: duration)
     }
 }
 
@@ -102,7 +106,7 @@ extension HTTPResponse {
         
         do {
             let decodedValue = try decoder.decode(type, from: data)
-            return HTTPResponse<U>(data: data, urlResponse: urlResponse, value: decodedValue)
+            return HTTPResponse<U>(data: data, urlResponse: urlResponse, value: decodedValue, duration: duration)
         } catch let decodingError as DecodingError {
             throw NetworkError.decodingError(decodingError)
         } catch {
