@@ -51,6 +51,11 @@ public struct HTTPHeaders: Sendable {
     public var names: [String] {
         Array(headers.keys)
     }
+    
+    /// Check if headers are empty
+    public var isEmpty: Bool {
+        headers.isEmpty
+    }
 }
 
 // MARK: - ExpressibleByDictionaryLiteral

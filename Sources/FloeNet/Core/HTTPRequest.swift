@@ -9,7 +9,7 @@ public struct HTTPRequest: Sendable {
     public let url: URL
     
     /// HTTP headers
-    public let headers: HTTPHeaders
+    public var headers: HTTPHeaders
     
     /// Query parameters to append to URL
     public let queryParameters: [String: String]

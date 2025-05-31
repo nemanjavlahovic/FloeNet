@@ -15,12 +15,18 @@ let package = Package(
         .library(
             name: "FloeNet",
             targets: ["FloeNet"]),
+        .executable(
+            name: "FloeNetTestRunner",
+            targets: ["FloeNetTestRunner"])
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "FloeNet"),
+        .executableTarget(
+            name: "FloeNetTestRunner",
+            dependencies: ["FloeNet"]),
         .testTarget(
             name: "FloeNetTests",
             dependencies: ["FloeNet"]
