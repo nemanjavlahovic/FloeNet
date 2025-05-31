@@ -8,15 +8,20 @@ FloeNet is a mini networking layer built on top of URLSession, designed to provi
 
 ## Features
 
-### ✅ Phase 1 (MVP) - Completed
-
-- **Core HTTP Client**: `HTTPClient.send(_:)` that wraps URLSession
-- **Request Configuration**: `HTTPRequest` struct with method, URL, headers, query parameters, body, and custom timeout support
-- **Response Handling**: `HTTPResponse` with raw response data and decoded object support
-- **Built-in JSON Support**: Automatic JSON encoding/decoding with `Codable`
-- **Comprehensive Error Handling**: `NetworkError` enum covering connectivity, HTTP status, decoding, and security errors
-- **Thread-Safe Operations**: Full async/await support with proper concurrency handling
-- **Request Validation**: Built-in validation for HTTP methods, URLs, and request configuration
+- **🚀 Modern Async/Await**: Full Swift concurrency support with proper error handling
+- **🔧 Request Builder Pattern**: Fluent API for building HTTP requests
+- **🎭 Mock HTTP Client**: Comprehensive mocking for unit testing
+- **🧪 Enhanced Testing Utilities**: Rich test helpers and assertions
+- **⚡ Core HTTP Client**: Clean wrapper around URLSession
+- **🔄 Retry Mechanisms**: Built-in retry with exponential backoff
+- **🎯 Request/Response Interceptors**: Middleware pattern for authentication, logging, etc.
+- **📊 Comprehensive Error Handling**: Detailed error types covering all networking scenarios
+- **🔒 Thread-Safe Operations**: All operations are safe for concurrent use
+- **⚙️ Advanced Configuration**: Timeout and connection management
+- **✅ Response Validation**: Customizable response validation
+- **📝 Logging Support**: Comprehensive request/response logging
+- **🏗️ Type-Safe**: Leverages Swift's type system for compile-time safety
+- **📦 Zero Dependencies**: Built entirely on Foundation and URLSession
 
 ## Requirements
 
@@ -32,13 +37,13 @@ Add FloeNet to your project using Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/yourusername/FloeNet.git", from: "0.1.0")
+    .package(url: "https://github.com/yourusername/FloeNet.git", from: "0.3.0")
 ]
 ```
 
 ## Quick Start
 
-### Basic GET Request
+### Basic Usage
 
 ```swift
 import FloeNet
@@ -54,6 +59,335 @@ do {
     print("Error: \(error)")
 }
 ```
+
+### Request Builder Pattern
+
+```swift
+// Fluent request building
+let response = try await RequestBuilder
+    .get("https://api.example.com/users")
+    .bearerToken("your-token")
+    .header("User-Agent", "MyApp/1.0")
+    .query("limit", 10)
+    .query("active", true)
+    .timeout(30.0)
+    .send(with: client)
+
+// Complex POST with JSON body
+struct User: Codable {
+    let name: String
+    let email: String
+}
+
+let user = User(name: "John Doe", email: "john@example.com")
+
+let response = try await RequestBuilder()
+    .url("https://api.example.com/users")
+    .post()
+    .bearerToken("your-token")
+    .jsonBody(user)
+    .send(with: client, expecting: User.self)
+
+print("Created user: \(response.data)")
+```
+
+### Mock Client for Testing
+
+```swift
+import XCTest
+@testable import YourApp
+
+class APITests: XCTestCase {
+    func testUserFetch() async throws {
+        // Setup mock client
+        let mockClient = MockHTTPClient()
+        let testUser = TestUser(id: 1, name: "John", email: "john@example.com")
+        
+        mockClient.stub(
+            url: URL(string: "https://api.example.com/users/1")!,
+            response: try .json(testUser)
+        )
+        
+        // Test your code
+        let apiClient = UserAPIClient(httpClient: mockClient)
+        let user = try await apiClient.getUser(id: 1)
+        
+        // Assertions
+        XCTAssertEqual(user.name, "John")
+        XCTAssertTrue(mockClient.verify(.url(URL(string: "https://api.example.com/users/1")!)))
+    }
+}
+```
+
+## API Reference
+
+## 🔧 Request Builder
+
+The RequestBuilder provides a fluent interface for constructing HTTP requests:
+
+### Basic Configuration
+
+```swift
+let request = try RequestBuilder()
+    .url("https://api.example.com/users")  // Set URL
+    .get()                                 // HTTP method
+    .build()                              // Build HTTPRequest
+
+// Or use static factory methods
+let request = try RequestBuilder.get("https://api.example.com/users")
+    .build()
+```
+
+### Headers and Authentication
+
+```swift
+let request = try RequestBuilder
+    .post("https://api.example.com/data")
+    .header("Content-Type", "application/json")
+    .header("X-Custom-Header", "value")
+    .bearerToken("your-jwt-token")
+    .basicAuth(username: "user", password: "pass")
+    .build()
+```
+
+### Query Parameters
+
+```swift
+let request = try RequestBuilder
+    .get("https://api.example.com/search")
+    .query("q", "swift")
+    .query("limit", 10)
+    .query("active", true)
+    .query(["sort": "name", "order": "asc"])  // Dictionary
+    .build()
+```
+
+### Request Bodies
+
+```swift
+// JSON body (automatic Content-Type)
+struct PostData: Codable {
+    let title: String
+    let content: String
+}
+
+let request = try RequestBuilder
+    .post("https://api.example.com/posts")
+    .jsonBody(PostData(title: "Hello", content: "World"))
+    .build()
+
+// Form data
+let request = try RequestBuilder
+    .post("https://api.example.com/login")
+    .formBody(["username": "user", "password": "pass"])
+    .build()
+
+// Raw data
+let request = try RequestBuilder
+    .post("https://api.example.com/upload")
+    .body("Raw text content")
+    .header("Content-Type", "text/plain")
+    .build()
+```
+
+### Timeouts and Convenience
+
+```swift
+let request = try RequestBuilder
+    .get("https://api.example.com/data")
+    .timeout(30.0)          // Custom timeout
+    .quickTimeout()         // 30 seconds
+    .slowTimeout()          // 2 minutes
+    .build()
+```
+
+### Path Building
+
+```swift
+let request = try RequestBuilder
+    .get("https://api.example.com")
+    .path("users")           // https://api.example.com/users
+    .path("123")             // https://api.example.com/users/123
+    .path("profile")         // https://api.example.com/users/123/profile
+    .build()
+```
+
+### Direct Execution
+
+```swift
+// Send immediately without building
+let response = try await RequestBuilder
+    .get("https://api.example.com/users")
+    .bearerToken("token")
+    .send(with: client)
+
+// With type expectation
+let users = try await RequestBuilder
+    .get("https://api.example.com/users")
+    .send(with: client, expecting: [User].self)
+    .data
+```
+
+## 🎭 Mock Client for Testing
+
+The MockHTTPClient enables comprehensive testing without network calls:
+
+### Basic Mocking
+
+```swift
+let mockClient = MockHTTPClient()
+
+// Simple response
+mockClient.stub(
+    url: URL(string: "https://api.example.com/data")!,
+    response: MockHTTPClient.MockResponse(
+        statusCode: 200,
+        data: "Hello, World!".data(using: .utf8)!
+    )
+)
+
+// JSON response
+let user = User(name: "John", email: "john@example.com")
+mockClient.stub(
+    url: URL(string: "https://api.example.com/user")!,
+    response: try .json(user)
+)
+```
+
+### Advanced Matching
+
+```swift
+// URL pattern matching
+mockClient.stub(
+    .urlPattern("users"),               // Matches any URL containing "users"
+    response: try .json(users)
+)
+
+// HTTP method matching
+mockClient.stub(
+    .post,                              // Any POST request
+    response: .unauthorized()
+)
+
+// Header matching
+mockClient.stub(
+    .authenticated(token: "valid-token"),
+    response: try .json(["success": true])
+)
+```
+
+### Response Scenarios
+
+```swift
+// Error responses
+mockClient.stub(url: errorURL, response: .error(.noConnection))
+mockClient.stub(url: notFoundURL, response: .notFound())
+mockClient.stub(url: timeoutURL, response: .timeout(delay: 2.0))
+
+// Delayed responses
+mockClient.stub(
+    url: slowURL,
+    response: try .json(data, delay: 1.5)
+)
+
+// Response sequences
+mockClient.stubSequence(
+    .urlPattern("flaky-endpoint"),
+    responses: [
+        .error(.timeout),
+        .error(.noConnection),
+        try .json(successData)
+    ]
+)
+```
+
+### Request Verification
+
+```swift
+// Verify specific requests were made
+XCTAssertTrue(mockClient.verify(.url(specificURL)))
+XCTAssertTrue(mockClient.verify(.post))
+XCTAssertTrue(mockClient.verify(.authenticated(token: "token")))
+
+// Request count verification
+XCTAssertEqual(mockClient.requestCount(), 3)
+
+// Get recorded requests
+let requests = mockClient.recordedRequests()
+let postRequests = mockClient.requests(matching: .post)
+```
+
+## 🧪 Enhanced Testing Utilities
+
+### Test Data Generation
+
+```swift
+// Generate test data
+let user = TestUtilities.DataGenerator.testUser()
+let randomData = TestUtilities.DataGenerator.randomJSON()
+let largeFile = TestUtilities.DataGenerator.largeData(sizeInKB: 100)
+
+// Predefined test URLs
+let getURL = TestUtilities.TestURLs.get
+let postURL = TestUtilities.TestURLs.post
+let invalidURL = TestUtilities.TestURLs.invalid
+```
+
+### XCTest Extensions
+
+```swift
+class MyNetworkTests: XCTestCase {
+    func testAPIResponse() async throws {
+        let response = try await client.get(url: testURL)
+        
+        // Enhanced assertions
+        assertSuccess(response)
+        assertStatusCode(response, equals: 200)
+        assertHeader(response, name: "Content-Type", equals: "application/json")
+        assertHasHeader(response, name: "X-Request-ID")
+        
+        // Error testing
+        do {
+            _ = try await client.get(url: invalidURL)
+        } catch {
+            assertNetworkError(error, is: .noConnection)
+        }
+    }
+    
+    func testMockVerification() async throws {
+        let mockClient = MockHTTPClient()
+        // ... setup and test
+        
+        assertRequestRecorded(mockClient, matching: .get)
+        assertRequestCount(mockClient, equals: 1)
+    }
+}
+```
+
+### Test Scenarios
+
+```swift
+// Quick scenario setup
+try TestScenarios.setupSuccessScenario(
+    mockClient: mockClient,
+    url: testURL,
+    user: testUser
+)
+
+TestScenarios.setupNetworkErrorScenario(
+    mockClient: mockClient,
+    url: errorURL,
+    error: .timeout
+)
+
+try TestScenarios.setupSlowNetworkScenario(
+    mockClient: mockClient,
+    url: slowURL,
+    delay: 2.0
+)
+```
+
+## Core API (Traditional Approach)
 
 ### POST Request with JSON
 
@@ -75,22 +409,6 @@ do {
 }
 ```
 
-### JSON Response Decoding
-
-```swift
-struct ApiResponse: Codable {
-    let message: String
-    let data: [User]
-}
-
-let response = try await client.get(
-    url: url,
-    expecting: ApiResponse.self
-)
-
-print("Message: \(response.value?.message ?? "")")
-```
-
 ### Custom Request Building
 
 ```swift
@@ -109,49 +427,40 @@ let request = HTTPRequest.get(
 let response = try await client.send(request)
 ```
 
-### Error Handling
-
-```swift
-// Using Result-based API
-let result = await client.sendRequest(request)
-
-switch result {
-case .success(let response):
-    print("Success: \(response.statusCode)")
-case .failure(let error):
-    if error.isConnectivityError {
-        print("Network connectivity issue")
-    } else if error.isClientError {
-        print("Client error: \(error.statusCode ?? 0)")
-    } else if error.isServerError {
-        print("Server error: \(error.statusCode ?? 0)")
-    }
-}
-```
-
 ### Convenience API
 
 ```swift
 // Quick access using the Floe convenience API
 let response = try await Floe.get(url: url)
 let userResponse = try await Floe.post(url: url, body: user, expecting: User.self)
+
+// RequestBuilder convenience
+let request = try Floe.request()
+    .url("https://api.example.com/data")
+    .get()
+    .bearerToken("token")
+    .build()
 ```
 
 ## Core Types
 
-### HTTPClient
-
-The main client for making HTTP requests:
+### HTTPClient & Protocol
 
 ```swift
+// Protocol for testing
+protocol HTTPClientProtocol {
+    func send(_ request: HTTPRequest) async throws -> HTTPResponse<Data>
+    // ... other methods
+}
+
+// Real client
 let client = HTTPClient()
-let customClient = HTTPClient(defaultTimeout: 30.0)
-let configuredClient = HTTPClient.with(configuration: .ephemeral)
+
+// Mock client for testing
+let mockClient = MockHTTPClient()
 ```
 
 ### HTTPRequest
-
-Request configuration with full customization:
 
 ```swift
 let request = HTTPRequest(
@@ -166,8 +475,6 @@ let request = HTTPRequest(
 
 ### HTTPResponse
 
-Response container with typed data access:
-
 ```swift
 let response: HTTPResponse<Data> = try await client.send(request)
 print("Status: \(response.statusCode)")
@@ -176,8 +483,6 @@ print("Data: \(response.data)")
 ```
 
 ### HTTPHeaders
-
-Case-insensitive header management:
 
 ```swift
 var headers = HTTPHeaders()
@@ -191,17 +496,15 @@ let formHeaders = HTTPHeaders.formURLEncoded
 
 ### NetworkError
 
-Comprehensive error handling:
-
 ```swift
 enum NetworkError {
-    case noInternetConnection
-    case requestTimeout
+    case noConnection
+    case timeout
     case invalidURL(String)
     case httpError(statusCode: Int, data: Data?)
-    case clientError(statusCode: Int, data: Data?)
-    case serverError(statusCode: Int, data: Data?)
-    case decodingError(DecodingError)
+    case decodingError(String)
+    case requestTooLarge
+    case responseTooLarge
     // ... and more
 }
 ```
@@ -215,6 +518,8 @@ FloeNet follows these design principles:
 - **Async/Await First**: Modern concurrency with proper error handling
 - **Zero Dependencies**: Built entirely on Foundation and URLSession
 - **Thread-Safe**: All operations are safe for concurrent use
+- **Fluent API**: RequestBuilder pattern for readable request construction
+- **Test-Friendly**: Comprehensive mocking and testing utilities
 
 ## Testing
 
@@ -224,39 +529,23 @@ Run the test suite:
 swift test
 ```
 
-Or use the basic test runner:
+Or use the test runners:
 
 ```swift
 import FloeNet
 
-// Run basic validation tests
-BasicTests.runAllTests()
+// Run all tests
+TestRunner.runAllTests()
 ```
 
 ## Examples
 
-Check out the `Examples/` directory for more detailed usage examples:
+Check out the `Examples/` directory for comprehensive usage examples:
 
 - `BasicUsage.swift` - Core functionality demonstrations
-- More examples coming in future phases
-
-## Roadmap
-
-### 🔄 Phase 2 (Advanced Convenience)
-- Request builder pattern
-- Retry mechanisms with exponential backoff
-- Request/Response interceptors
-- File upload support
-
-### 🧪 Phase 3 (Testability + Mocks)
-- HTTPClientProtocol abstraction
-- Mock engine for testing
-- Request recording/playback
-
-### 🔧 Phase 4 (Debugging & Logging)
-- Built-in logging and debugging tools
-- Performance metrics
-- Network traffic inspection
+- `RequestBuilderExamples.swift` - RequestBuilder patterns and best practices
+- `MockingExamples.swift` - Testing with MockHTTPClient
+- `RealWorldExamples.swift` - Complete API client implementations
 
 ## Contributing
 
@@ -268,4 +557,4 @@ FloeNet is available under the MIT license. See the LICENSE file for more info.
 
 ---
 
-**FloeNet** - Making networking flow smoothly 🌊
+**FloeNet** - Modern Swift networking made simple 🌊
